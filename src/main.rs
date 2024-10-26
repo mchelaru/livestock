@@ -100,10 +100,30 @@ fn main() {
         let mut value = 0.;
         for (ticker, quantity) in &stocks_dict {
             let ticker_quote = quotes.get(ticker);
+
+            // Get the value at index from a vector or just return the last
+            // possible value if the index is greater than the len
+            // Returns None for empty vectors
+            // implemented as a macro in order to quickly access ticker and args
+            macro_rules! get_or_last {
+                ($v: ident, $index: ident) => {
+                    if $v.len() == 0 {
+                        None
+                    } else if $index < $v.len() {
+                        Some($v[$index].clone())
+                    } else {
+                        if args.debug {
+                            println!("Error accessing day {} for ticker {ticker}", $index);
+                        }
+                        Some($v[$v.len() - 1].clone())
+                    }
+                };
+            }
+
             match ticker_quote {
-                Some(q) => match q.get(day) {
+                Some(q) => match get_or_last!(q, day) {
                     Some(quote) => value += quote.close * (*quantity) as f64,
-                    None => println!("Error accessing day {day} for ticker {ticker}"),
+                    None => println!("No quotes found for ticker {ticker}"),
                 },
                 None => {
                     eprintln!("No value found for {ticker}");
@@ -120,24 +140,4 @@ fn main() {
             .display();
     }
     println!("Portfolio total value: {:.2}", values[values.len() - 1]);
-}
-
-#[cfg(test)]
-mod test {
-    use textplots::{Chart, Plot, Shape};
-    use tokio_test;
-    use yahoo_finance_api as yf;
-
-    #[test]
-    fn something() {
-        let provider = yf::YahooConnector::new().unwrap();
-
-        let response = tokio_test::block_on(provider.get_quote_range("AAPL", "1d", "10d")).unwrap();
-        let v = response.quotes().unwrap();
-        println!("{v:#?}");
-
-        Chart::new(75, 20, 0., v.len() as f32 - 0.5)
-            .lineplot(&Shape::Continuous(Box::new(|i| v[i as usize].close as f32)))
-            .display();
-    }
 }
