@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::{collections::HashMap, fs};
 use textplots::{Chart, LabelBuilder, Plot, Shape};
-use tokio_test;
+use tokio;
 use yahoo_finance_api::{self as yf, Quote};
 
 #[derive(Parser, Debug)]
@@ -20,7 +20,8 @@ struct Args {
     debug: bool,
 }
 
-fn main() {
+#[tokio::main(flavor = "multi_thread", worker_threads = 4)]
+async fn main() {
     let args = Args::parse();
 
     // read the symbols
@@ -33,13 +34,27 @@ fn main() {
     let stocks_dict: HashMap<String, u32> = serde_json::from_value(stocks_str.clone()).unwrap();
 
     let mut quotes: HashMap<String, Vec<Quote>> = HashMap::new();
-    let provider = yf::YahooConnector::new().unwrap();
 
     println!("Querying Yahoo! Finance...");
-    for (ticker, quantity) in &stocks_dict {
+    let mut symbol_join_handles = Vec::with_capacity(stocks_dict.len());
+    let mut quotes_join_handles = Vec::with_capacity(stocks_dict.len());
+
+    for (ticker, _quantity) in &stocks_dict {
+        let mticker = ticker.clone(); // moved ticker
+        let jh = tokio::spawn(async move {
+            let provider = yf::YahooConnector::new().unwrap();
+            let search_result = provider.search_ticker(&mticker).await;
+            (mticker, search_result)
+        });
+        symbol_join_handles.push(jh);
+    }
+
+    for j in symbol_join_handles {
+        let (ticker, job_result) = j.await.unwrap();
+
         // resolve the symbols
         let yahoo_symbol;
-        match tokio_test::block_on(provider.search_ticker(&ticker)) {
+        match job_result {
             Ok(r) => {
                 if r.quotes.len() < 1 {
                     eprintln!("Error matching symbol {ticker}");
@@ -67,11 +82,22 @@ fn main() {
             }
         }
 
-        let response = tokio_test::block_on(provider.get_quote_range(
-            &yahoo_symbol,
-            "1d",
-            &format!("{}d", args.days),
-        ));
+        let m_yahoo_symbol = yahoo_symbol.clone();
+        let response = tokio::spawn(async move {
+            let provider = yf::YahooConnector::new().unwrap();
+            let quote = provider
+                .get_quote_range(&m_yahoo_symbol, "1d", &format!("{}d", args.days))
+                .await;
+            (ticker, quote)
+        });
+        quotes_join_handles.push(response);
+    }
+
+    // now wait for the quotes and push them into the quotes hashmap
+    for jh in quotes_join_handles {
+        let (ticker, response) = jh.await.unwrap();
+        let quantity = stocks_dict.get(&ticker).unwrap();
+
         match response {
             Ok(response) => {
                 let q = response.quotes().unwrap();
@@ -80,7 +106,7 @@ fn main() {
                 if args.debug {
                     let quote_at_close = response.last_quote().unwrap().close;
                     println!(
-                        "Last quote at close for {yahoo_symbol}: {} * {} = {}",
+                        "Last quote at close for {ticker}: {} * {} = {}",
                         quote_at_close,
                         *quantity,
                         quote_at_close * (*quantity) as f64
@@ -94,7 +120,7 @@ fn main() {
         }
     }
 
-    // graph and print the total value
+    // get the close prices at closes for every requested day
     let mut values = Vec::with_capacity(args.days);
     for day in 0..args.days {
         let mut value = 0.;
@@ -132,6 +158,8 @@ fn main() {
         }
         values.push(value);
     }
+
+    // graph and print the total value
     if args.days > 1 {
         println!("Portfolio evolution on the last {} days", args.days);
         Chart::new(75, 20, 0., values.len() as f32 - 0.1)
