@@ -30,7 +30,8 @@ Options:
 
 Running it on the file above returns:
 
-```./livestock -f stocks.json --days 5
+```
+./livestock -f stocks.json --days 5
 Querying Yahoo! Finance...
 Portfolio evolution on the last 5 days
 ⡁                             ⢰⠉⠉⠉⠉⠉⠉⠁ 29853.2
