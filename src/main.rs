@@ -1,8 +1,22 @@
+use chrono::{Datelike, Days, Utc, Weekday};
 use clap::Parser;
-use std::{collections::HashMap, fs};
+use providers::Providers;
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    sync::Arc,
+};
 use textplots::{Chart, LabelBuilder, Plot, Shape};
 use tokio;
-use yahoo_finance_api::{self as yf, Quote};
+
+mod price_cacher;
+use price_cacher::PriceCacher;
+mod provider;
+mod providers;
+mod xfra;
+mod yfinance;
+
+use chrono::NaiveDate;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -15,157 +29,190 @@ struct Args {
     #[arg(long, default_value_t = 10)]
     days: usize,
 
-    /// Prints additional debug information
+    /// Displays additional debug information
     #[arg(long, default_value_t = false)]
     debug: bool,
+
+    /// Extends the last known price in case no data exists
+    #[arg(long, default_value_t = true)]
+    extend_price: bool,
+
+    /// display the daily portfolio value
+    #[arg(long, default_value_t = false)]
+    display_daily_value: bool,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() {
     let args = Args::parse();
 
-    // read the symbols
-    let file = fs::File::open(args.file).expect("file should open read only");
-    let json: serde_json::Value =
-        serde_json::from_reader(file).expect("file should be proper JSON");
-    let stocks_str = json
-        .get("Stocks")
-        .expect("config file should have Stocks key");
-    let stocks_dict: HashMap<String, u32> = serde_json::from_value(stocks_str.clone()).unwrap();
+    // get the list of dates
+    let today = Utc::now().naive_utc();
+    let start_day = today.checked_sub_days(Days::new(args.days as u64)).unwrap();
 
-    let mut quotes: HashMap<String, Vec<Quote>> = HashMap::new();
-
-    println!("Querying Yahoo! Finance...");
-    let mut symbol_join_handles = Vec::with_capacity(stocks_dict.len());
-    let mut quotes_join_handles = Vec::with_capacity(stocks_dict.len());
-
-    for (ticker, _quantity) in &stocks_dict {
-        let mticker = ticker.clone(); // moved ticker
-        let jh = tokio::spawn(async move {
-            let provider = yf::YahooConnector::new().unwrap();
-            let search_result = provider.search_ticker(&mticker).await;
-            (mticker, search_result)
-        });
-        symbol_join_handles.push(jh);
-    }
-
-    for j in symbol_join_handles {
-        let (ticker, job_result) = j.await.unwrap();
-
-        // resolve the symbols
-        let yahoo_symbol;
-        match job_result {
-            Ok(r) => {
-                if r.quotes.len() < 1 {
-                    eprintln!("Error matching symbol {ticker}");
-                    continue;
-                } else if r.quotes.len() > 1 && args.debug {
-                    eprintln!("Multiple matches for {ticker} - using the first match");
-                    println!(
-                        "{}",
-                        r.quotes
-                            .iter()
-                            .map(|q| q.symbol.clone())
-                            .reduce(|mut acc, s| {
-                                acc.push_str(" ");
-                                acc.push_str(&s);
-                                acc
-                            })
-                            .unwrap()
-                    );
-                }
-                yahoo_symbol = r.quotes[0].symbol.clone();
-            }
-            Err(_) => {
-                eprintln!("Error searching for symbol {ticker}");
-                continue;
-            }
+    // read the symbol file
+    let file = match fs::File::open(args.file.clone()) {
+        Ok(f) => f,
+        Err(_) => {
+            eprintln!("Unable to open {}", args.file);
+            return;
         }
+    };
+    let json: serde_json::Value = match serde_json::from_reader(file) {
+        Ok(jv) => jv,
+        Err(e) => {
+            eprintln!(
+                "Unable to parse json in file {}. Error: {}",
+                args.file,
+                e.to_string()
+            );
+            return;
+        }
+    };
 
-        let m_yahoo_symbol = yahoo_symbol.clone();
-        let response = tokio::spawn(async move {
-            let provider = yf::YahooConnector::new().unwrap();
-            let quote = provider
-                .get_quote_range(&m_yahoo_symbol, "1d", &format!("{}d", args.days))
-                .await;
-            (ticker, quote)
-        });
-        quotes_join_handles.push(response);
+    let maps = json.as_object().unwrap();
+
+    let mut portfolio: HashMap<NaiveDate, HashMap<String, f64>> = HashMap::default();
+    let mut quotes_join_handles = vec![];
+    let mut stocks_dict: HashMap<String, u32> = HashMap::default();
+
+    for provider_key in maps.keys() {
+        let stocks_str = json.get(provider_key).expect("error parsing config key");
+        let provider_stocks_dict: HashMap<String, u32> =
+            serde_json::from_value(stocks_str.clone()).unwrap();
+        stocks_dict.extend(
+            provider_stocks_dict
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone())),
+        );
+
+        let price_cacher = Arc::new(PriceCacher::new());
+
+        let provider = Providers::build(provider_key);
+        if provider.is_none() {
+            eprintln!("Invalid provider: {}", provider_key);
+            continue;
+        }
+        let provider = Arc::new(provider.unwrap());
+        println!("Querying {}...", provider.get_provider_name());
+
+        let mut current_date = start_day.clone();
+        while current_date < today {
+            if current_date.weekday() != Weekday::Sat && current_date.weekday() != Weekday::Sun {
+                for (ticker, _quantity) in &provider_stocks_dict {
+                    let mticker = ticker.clone(); // moved ticker
+                    let price_cacher_ref = Arc::clone(&price_cacher);
+                    let provider_ref = Arc::clone(&provider);
+                    let date = current_date.into();
+                    let jh = tokio::spawn(async move {
+                        price_cacher_ref
+                            .download_price(provider_ref, mticker, date)
+                            .await
+                    });
+                    quotes_join_handles.push(jh);
+                }
+            }
+            current_date = current_date.checked_add_days(Days::new(1)).unwrap();
+        }
     }
 
-    // now wait for the quotes and push them into the quotes hashmap
-    for jh in quotes_join_handles {
-        let (ticker, response) = jh.await.unwrap();
-        let quantity = stocks_dict.get(&ticker).unwrap();
-
-        match response {
-            Ok(response) => {
-                let q = response.quotes().unwrap();
-                quotes.insert(ticker.clone(), q);
-
+    for j in quotes_join_handles {
+        match j.await.unwrap() {
+            Ok((ticker, date, price)) => {
+                let quantity = stocks_dict.get(&ticker).unwrap();
                 if args.debug {
-                    let quote_at_close = response.last_quote().unwrap().close;
                     println!(
-                        "Last quote at close for {ticker}: {} * {} = {}",
-                        quote_at_close,
+                        "Quote at close for {ticker} on {date}: {price} * {} = {}",
                         *quantity,
-                        quote_at_close * (*quantity) as f64
+                        price * (*quantity) as f64
                     );
                 }
+                let day_quotes = portfolio.entry(date).or_default();
+                day_quotes.insert(ticker, price * (*quantity) as f64);
             }
-            Err(_) => {
-                eprintln!("Error loading quotes for symbol {ticker}");
-                continue;
-            }
-        }
-    }
-
-    // get the close prices at closes for every requested day
-    let mut values = Vec::with_capacity(args.days);
-    for day in 0..args.days {
-        let mut value = 0.;
-        for (ticker, quantity) in &stocks_dict {
-            let ticker_quote = quotes.get(ticker);
-
-            // Get the value at index from a vector or just return the last
-            // possible value if the index is greater than the len
-            // Returns None for empty vectors
-            // implemented as a macro in order to quickly access ticker and args
-            macro_rules! get_or_last {
-                ($v: ident, $index: ident) => {
-                    if $v.len() == 0 {
-                        None
-                    } else if $index < $v.len() {
-                        Some($v[$index].clone())
-                    } else {
-                        if args.debug {
-                            println!("Error accessing day {} for ticker {ticker}", $index);
-                        }
-                        Some($v[$v.len() - 1].clone())
-                    }
-                };
-            }
-
-            match ticker_quote {
-                Some(q) => match get_or_last!(q, day) {
-                    Some(quote) => value += quote.close * (*quantity) as f64,
-                    None => println!("No quotes found for ticker {ticker}"),
-                },
-                None => {
-                    eprintln!("No value found for {ticker}");
+            Err(e) => {
+                if args.debug {
+                    eprintln!("Error {e:#?}")
                 }
             }
         }
-        values.push(value);
     }
 
+    let mut sorted_dates = portfolio.keys().copied().collect::<Vec<_>>();
+    sorted_dates.sort();
+    if args.extend_price && sorted_dates.len() > 1 {
+        // right extend the prices in case they are not present for the latest day{s}
+        // YF is well known for this "feature"
+        let mut tickers = HashSet::new();
+        for (_, portfolio_date) in &portfolio {
+            portfolio_date.keys().for_each(|k| {
+                tickers.insert(k.clone());
+            });
+        }
+        for ticker in tickers {
+            let mut last_price = 0.;
+            for date in &sorted_dates[0..sorted_dates.len()] {
+                let portfolio_date = portfolio.get_mut(date).unwrap();
+                last_price = portfolio_date
+                    .entry(ticker.clone())
+                    .or_insert(last_price.clone())
+                    .clone();
+            }
+        }
+    }
+
+    if args.debug {
+        println!("{:#?}", portfolio);
+    }
+
+    //
     // graph and print the total value
+    //
     if args.days > 1 {
-        println!("Portfolio evolution on the last {} days", args.days);
-        Chart::new(75, 20, 0., values.len() as f32 - 0.1)
+        let empty_day_dict = HashMap::default(); // in case we have missing days (e.g. weekends)
+        println!("Portfolio evolution for the past {} days", args.days);
+        Chart::new(150, 40, 0., portfolio.len() as f32 + 1.0)
             .x_label_format(textplots::LabelFormat::None)
-            .lineplot(&Shape::Continuous(Box::new(|i| values[i as usize] as f32)))
+            .lineplot(&Shape::Continuous(Box::new(|x| {
+                portfolio
+                    .get(
+                        &start_day
+                            .checked_add_days(Days::new(x.round() as u64))
+                            .unwrap()
+                            .date(),
+                    )
+                    .unwrap_or_else(|| &empty_day_dict)
+                    .iter()
+                    .map(|(_ticker, price)| *price)
+                    .reduce(|acc, p| acc + p)
+                    .unwrap_or_default() as f32
+            })))
             .display();
     }
-    println!("Portfolio total value: {:.2}", values[values.len() - 1]);
+
+    // and finally prints the total portfolio value
+    if args.display_daily_value {
+        for date in &sorted_dates {
+            println!(
+                "Portfolio total value on {date}: {:.2}",
+                portfolio[date]
+                    .iter()
+                    .map(|(_, price)| *price)
+                    .reduce(|acc, p| acc + p)
+                    .unwrap()
+            );
+        }
+    } else {
+        println!(
+            "Portfolio total value: {:.2}",
+            match sorted_dates.last() {
+                Some(last_day) => portfolio[last_day]
+                    .iter()
+                    .map(|(_, price)| *price)
+                    .reduce(|acc, p| acc + p)
+                    .unwrap(),
+                None => 0.,
+            }
+        );
+    }
 }
