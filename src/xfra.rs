@@ -75,3 +75,18 @@ impl Xfra {
         Ok((isin, date, float_price))
     }
 }
+
+#[tokio::test]
+async fn test_xfra() {
+    let xfra = Xfra::new();
+    let (isin, date, price) = xfra
+        .download_price(
+            "DE000A0D6554".to_owned(),
+            NaiveDate::from_ymd_opt(2025, 3, 5).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(isin, "DE000A0D6554");
+    assert_eq!(date, NaiveDate::from_ymd_opt(2025, 3, 5).unwrap());
+    assert_eq!((price * 100.0) as u32, 1560); // 15.60 EUR
+}

@@ -142,3 +142,18 @@ impl YFinance {
         Ok((ticker, date, quote.last_quote().unwrap().close))
     }
 }
+
+#[tokio::test]
+async fn download_one_ticker() {
+    let yf = YFinance::new(true);
+    let (ticker, date, price) = yf
+        .download_price(
+            "CSCO".to_owned(),
+            NaiveDate::from_ymd_opt(2024, 10, 1).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ticker, "CSCO");
+    assert_eq!(date, NaiveDate::from_ymd_opt(2024, 10, 1).unwrap());
+    assert_eq!((price * 100.0) as u32, 5274); // 52.74
+}
