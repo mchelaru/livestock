@@ -12,8 +12,6 @@ use yahoo_finance_api::{
     YahooConnector,
 };
 
-use crate::provider::Provider;
-
 #[repr(transparent)]
 struct DebugHolder<T> {
     pub(crate) inner: T,
@@ -72,10 +70,7 @@ impl YFinance {
         }
     }
 
-    async fn resolve_symbol(
-        &self,
-        ticker: &str,
-    ) -> Result<String, <YFinance as Provider>::ErrorType> {
+    async fn resolve_symbol(&self, ticker: &str) -> Result<String, YFinanceError> {
         if let Some(cache_result) = self.ticker_resolver_cache.lock().unwrap().get(ticker) {
             return Ok(cache_result.clone());
         }
@@ -120,20 +115,16 @@ impl YFinance {
             .insert(ticker.to_owned(), search_result.quotes[0].symbol.clone());
         Ok(search_result.quotes[0].symbol.clone())
     }
-}
 
-impl Provider for YFinance {
-    type ErrorType = YFinanceError;
-
-    fn get_provider_name(&self) -> String {
+    pub fn get_provider_name(&self) -> String {
         "Yahoo! Finance".to_owned()
     }
 
-    async fn download_price(
+    pub async fn download_price(
         &self,
         ticker: String,
         date: NaiveDate,
-    ) -> Result<(String, NaiveDate, f64), Self::ErrorType> {
+    ) -> Result<(String, NaiveDate, f64), YFinanceError> {
         let yahoo_symbol = self.resolve_symbol(&ticker).await?;
         let date_time = date.and_hms_opt(0, 0, 0).unwrap();
 

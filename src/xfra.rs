@@ -2,8 +2,6 @@ use std::{collections::HashMap, sync::Mutex};
 
 use chrono::NaiveDate;
 
-use crate::provider::Provider;
-
 /// Get the data from XFRA API
 /// E.g. https://api.boerse-frankfurt.de/v1/data/price_information/single?isin=SOME_ISIN_HERE&mic=XFRA
 #[derive(Debug)]
@@ -19,21 +17,17 @@ impl Xfra {
             cache: Mutex::new(HashMap::default()),
         }
     }
-}
 
-impl Provider for Xfra {
-    type ErrorType = std::io::Error;
-
-    fn get_provider_name(&self) -> String {
+    pub fn get_provider_name(&self) -> String {
         "XFRA".to_owned()
     }
 
     /// Downloads the price for a given ISIN
-    async fn download_price(
+    pub async fn download_price(
         &self,
         isin: String,
         date: NaiveDate,
-    ) -> Result<(String, NaiveDate, f64), Self::ErrorType> {
+    ) -> Result<(String, NaiveDate, f64), std::io::Error> {
         if let Some(cache_result) = self.cache.lock().unwrap().get(&isin) {
             return Ok((isin, date, *cache_result));
         }

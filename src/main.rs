@@ -1,6 +1,6 @@
 use chrono::{Datelike, Days, Utc, Weekday};
 use clap::Parser;
-use providers::Providers;
+use provider::Provider;
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -11,7 +11,6 @@ use textplots::{Chart, LabelBuilder, Plot, Shape};
 mod price_cacher;
 use price_cacher::PriceCacher;
 mod provider;
-mod providers;
 mod xfra;
 mod yfinance;
 
@@ -79,7 +78,7 @@ async fn main() {
 
         let price_cacher = Arc::new(PriceCacher::new());
 
-        let provider = Providers::build(provider_key);
+        let provider = Provider::build(provider_key);
         if provider.is_none() {
             eprintln!("Invalid provider: {}", provider_key);
             continue;

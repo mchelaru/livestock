@@ -4,7 +4,7 @@ use chrono::NaiveDate;
 use dirs::home_dir;
 use rusqlite::{self, Connection};
 
-use crate::{provider::Provider, providers::Providers};
+use crate::provider::Provider;
 
 #[derive(Debug)]
 pub struct PriceCacher {
@@ -31,16 +31,16 @@ impl PriceCacher {
         }
     }
 
-    fn get_provider_name(provider: &Providers) -> String {
+    fn get_provider_name(provider: &Provider) -> String {
         match provider {
-            Providers::YFinance(yfinance) => yfinance.get_provider_name(),
-            Providers::Xfra(xfra) => xfra.get_provider_name(),
+            Provider::YFinance(yfinance) => yfinance.get_provider_name(),
+            Provider::Xfra(xfra) => xfra.get_provider_name(),
         }
     }
 
     pub async fn download_price(
         &self,
-        provider: Arc<Providers>,
+        provider: Arc<Provider>,
         ticker: String,
         date: NaiveDate,
     ) -> Result<(String, NaiveDate, f64), std::io::Error> {
