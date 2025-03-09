@@ -1,6 +1,11 @@
 use chrono::NaiveDate;
+use xfra::Xfra;
+use yfinance::YFinance;
 
-use crate::{xfra::Xfra, yfinance::YFinance};
+#[path = "providers/xfra.rs"]
+mod xfra;
+#[path = "providers/yfinance.rs"]
+mod yfinance;
 
 #[derive(Debug)]
 pub(crate) enum Provider {

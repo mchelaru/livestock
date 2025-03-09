@@ -11,8 +11,6 @@ use textplots::{Chart, LabelBuilder, Plot, Shape};
 mod price_cacher;
 use price_cacher::PriceCacher;
 mod provider;
-mod xfra;
-mod yfinance;
 
 use chrono::NaiveDate;
 
