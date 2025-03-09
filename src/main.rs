@@ -7,7 +7,6 @@ use std::{
     sync::Arc,
 };
 use textplots::{Chart, LabelBuilder, Plot, Shape};
-use tokio;
 
 mod price_cacher;
 use price_cacher::PriceCacher;
@@ -61,11 +60,7 @@ async fn main() {
     let json: serde_json::Value = match serde_json::from_reader(file) {
         Ok(jv) => jv,
         Err(e) => {
-            eprintln!(
-                "Unable to parse json in file {}. Error: {}",
-                args.file,
-                e.to_string()
-            );
+            eprintln!("Unable to parse json in file {}. Error: {}", args.file, e);
             return;
         }
     };
@@ -80,11 +75,7 @@ async fn main() {
         let stocks_str = json.get(provider_key).expect("error parsing config key");
         let provider_stocks_dict: HashMap<String, u32> =
             serde_json::from_value(stocks_str.clone()).unwrap();
-        stocks_dict.extend(
-            provider_stocks_dict
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone())),
-        );
+        stocks_dict.extend(provider_stocks_dict.iter().map(|(k, v)| (k.clone(), *v)));
 
         let price_cacher = Arc::new(PriceCacher::new());
 
@@ -96,10 +87,10 @@ async fn main() {
         let provider = Arc::new(provider.unwrap());
         println!("Querying {}...", provider.get_provider_name());
 
-        let mut current_date = start_day.clone();
+        let mut current_date = start_day;
         while current_date < today {
             if current_date.weekday() != Weekday::Sat && current_date.weekday() != Weekday::Sun {
-                for (ticker, _quantity) in &provider_stocks_dict {
+                for ticker in provider_stocks_dict.keys() {
                     let mticker = ticker.clone(); // moved ticker
                     let price_cacher_ref = Arc::clone(&price_cacher);
                     let provider_ref = Arc::clone(&provider);
@@ -144,7 +135,7 @@ async fn main() {
         // right extend the prices in case they are not present for the latest day{s}
         // YF is well known for this "feature"
         let mut tickers = HashSet::new();
-        for (_, portfolio_date) in &portfolio {
+        for portfolio_date in portfolio.values() {
             portfolio_date.keys().for_each(|k| {
                 tickers.insert(k.clone());
             });
@@ -153,10 +144,7 @@ async fn main() {
             let mut last_price = 0.;
             for date in &sorted_dates[0..sorted_dates.len()] {
                 let portfolio_date = portfolio.get_mut(date).unwrap();
-                last_price = portfolio_date
-                    .entry(ticker.clone())
-                    .or_insert(last_price.clone())
-                    .clone();
+                last_price = *portfolio_date.entry(ticker.clone()).or_insert(last_price);
             }
         }
     }
@@ -181,7 +169,7 @@ async fn main() {
                             .unwrap()
                             .date(),
                     )
-                    .unwrap_or_else(|| &empty_day_dict)
+                    .unwrap_or(&empty_day_dict)
                     .iter()
                     .map(|(_ticker, price)| *price)
                     .reduce(|acc, p| acc + p)
@@ -196,8 +184,8 @@ async fn main() {
             println!(
                 "Portfolio total value on {date}: {:.2}",
                 portfolio[date]
-                    .iter()
-                    .map(|(_, price)| *price)
+                    .values()
+                    .copied()
                     .reduce(|acc, p| acc + p)
                     .unwrap()
             );
@@ -207,8 +195,8 @@ async fn main() {
             "Portfolio total value: {:.2}",
             match sorted_dates.last() {
                 Some(last_day) => portfolio[last_day]
-                    .iter()
-                    .map(|(_, price)| *price)
+                    .values()
+                    .copied()
                     .reduce(|acc, p| acc + p)
                     .unwrap(),
                 None => 0.,

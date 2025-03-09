@@ -1,20 +1,19 @@
 use std::{collections::HashMap, sync::Mutex};
 
 use chrono::NaiveDate;
-use reqwest;
 
 use crate::provider::Provider;
 
 /// Get the data from XFRA API
 /// E.g. https://api.boerse-frankfurt.de/v1/data/price_information/single?isin=SOME_ISIN_HERE&mic=XFRA
 #[derive(Debug)]
-pub struct XFRA {
+pub struct Xfra {
     /// because the XFRA API doesn't allow yet to query a specific date, we use
     /// this cache in order to avoid redundant queries
     cache: Mutex<HashMap<String, f64>>,
 }
 
-impl XFRA {
+impl Xfra {
     pub(crate) fn new() -> Self {
         Self {
             cache: Mutex::new(HashMap::default()),
@@ -22,7 +21,7 @@ impl XFRA {
     }
 }
 
-impl Provider for XFRA {
+impl Provider for Xfra {
     type ErrorType = std::io::Error;
 
     fn get_provider_name(&self) -> String {
@@ -70,16 +69,12 @@ impl Provider for XFRA {
             serde_json::from_value(price.clone()).expect("XFRA: error transforming price to float");
 
         // divide the price by 100 in the case the price is traded in percent
-        match json.get("tradedInPercent") {
-            Some(value) => match serde_json::from_value(value.clone()) {
-                Ok(boolean_value) => {
-                    if boolean_value {
-                        float_price /= 100.0;
-                    }
+        if let Some(value) = json.get("tradedInPercent") {
+            if let Ok(boolean_value) = serde_json::from_value(value.clone()) {
+                if boolean_value {
+                    float_price /= 100.0;
                 }
-                Err(_) => {}
-            },
-            None => {}
+            }
         }
 
         self.cache.lock().unwrap().insert(isin.clone(), float_price);

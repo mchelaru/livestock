@@ -34,7 +34,7 @@ impl PriceCacher {
     fn get_provider_name(provider: &Providers) -> String {
         match provider {
             Providers::YFinance(yfinance) => yfinance.get_provider_name(),
-            Providers::XFRA(xfra) => xfra.get_provider_name(),
+            Providers::Xfra(xfra) => xfra.get_provider_name(),
         }
     }
 

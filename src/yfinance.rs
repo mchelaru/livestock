@@ -85,13 +85,13 @@ impl YFinance {
             .lock()
             .await
             .inner
-            .search_ticker(&ticker)
+            .search_ticker(ticker)
             .await
             .map_err(|err| {
                 YFinanceError::new(ticker, &chrono::Utc::now().naive_utc().into(), err)
             })?;
 
-        if search_result.quotes.len() < 1 {
+        if search_result.quotes.is_empty() {
             eprintln!("Error matching symbol {ticker}");
             return Err(YFinanceError::new(
                 ticker,
@@ -107,7 +107,7 @@ impl YFinance {
                     .iter()
                     .map(|q| q.symbol.clone())
                     .reduce(|mut acc, s| {
-                        acc.push_str(" ");
+                        acc.push(' ');
                         acc.push_str(&s);
                         acc
                     })
