@@ -91,17 +91,23 @@ async fn main() {
     // graph and print the total value
     //
     if args.days > 1 {
-        println!("Portfolio evolution for the past {} days", args.days);
-        Chart::new(150, 40, 0., sorted_dates.len() as f32 + 1.0)
-            .x_label_format(textplots::LabelFormat::None)
-            .lineplot(&Shape::Continuous(Box::new(|x| {
-                portfolio.portfolio_value(
-                    start_date
-                        .checked_add_days(Days::new(x.round() as u64))
-                        .unwrap()
-                        .into(),
-                ) as f32
+        let data_points = sorted_dates
+            .iter()
+            .enumerate()
+            .map(|(i, date)| (i as f32, portfolio.portfolio_value((*date).into()) as f32))
+            .collect::<Vec<_>>();
+        println!(
+            "Portfolio evolution for the past {} days (weekends omitted)",
+            args.days
+        );
+        let m_sorted_dates = sorted_dates.clone();
+        Chart::new(150, 40, 0., (sorted_dates.len() - 1) as f32)
+            .x_label_format(textplots::LabelFormat::Custom(Box::new(move |x| {
+                m_sorted_dates[x.round() as usize]
+                    .format("%Y-%m-%d")
+                    .to_string()
             })))
+            .lineplot(&Shape::Steps(&data_points))
             .display();
     }
 
