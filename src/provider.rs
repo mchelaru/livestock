@@ -9,6 +9,7 @@ mod yfinance;
 
 #[derive(Debug)]
 pub(crate) enum Provider {
+    None,
     YFinance(YFinance),
     Xfra(Xfra),
 }
@@ -28,6 +29,7 @@ impl Provider {
                 .download_price(name.to_owned(), date)
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+            _ => unimplemented!(),
         }
     }
 
@@ -35,6 +37,7 @@ impl Provider {
         match self {
             Provider::YFinance(yfinance) => yfinance.get_provider_name(),
             Provider::Xfra(xfra) => xfra.get_provider_name(),
+            _ => unimplemented!(),
         }
     }
 

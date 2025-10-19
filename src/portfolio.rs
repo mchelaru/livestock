@@ -4,15 +4,25 @@ use std::io::Error;
 use std::{collections::HashMap, sync::Arc};
 
 use chrono::{Days, NaiveDate};
+use serde::Deserialize;
 use tokio::task::JoinSet;
 
 use crate::{price_cacher::PriceCacher, Provider};
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Instrument {
+    #[serde(rename = "symbol")]
     name: String,
     quantity: u32,
+    buy_date: NaiveDate,
+    #[serde(default)]
+    sell_date: Option<NaiveDate>,
+    #[serde(skip, default = "no_provider")]
     provider: Arc<Provider>,
+}
+
+fn no_provider() -> Arc<Provider> {
+    Arc::new(Provider::None)
 }
 
 impl PartialEq for Instrument {
@@ -41,9 +51,18 @@ impl Instrument {
     pub fn get_name(&self) -> &str {
         &self.name
     }
+
+    pub fn get_buy_date(&self) -> &NaiveDate {
+        &self.buy_date
+    }
+
+    pub fn get_sell_date(&self) -> &Option<NaiveDate> {
+        &self.sell_date
+    }
 }
 
 pub struct Portfolio {
+    /// Instrument -> (date, price)
     portfolio: HashMap<Instrument, HashMap<NaiveDate, f64>>,
     price_cacher: Arc<PriceCacher>,
     request_join_handles: JoinSet<Result<(Instrument, NaiveDate, f64), Error>>,
@@ -65,15 +84,10 @@ impl Portfolio {
             };
             let provider = Arc::new(provider);
 
-            let stocks_str = json.get(provider_key).expect("error parsing config key");
-            let provider_stocks_dict: HashMap<String, u32> =
-                serde_json::from_value(stocks_str.clone()).unwrap();
-            for (instrument_name, quantity) in provider_stocks_dict {
-                let instrument = Instrument {
-                    name: instrument_name,
-                    quantity,
-                    provider: Arc::clone(&provider),
-                };
+            let provider_stocks_dict: Vec<Instrument> =
+                serde_json::from_value(maps[provider_key].clone()).unwrap();
+            for mut instrument in provider_stocks_dict {
+                instrument.provider = Arc::clone(&provider);
                 portfolio.insert(instrument, HashMap::default());
             }
         }
@@ -174,5 +188,36 @@ impl Portfolio {
             .map(|(_, value)| value)
             .reduce(|acc, p| acc + p)
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use chrono::NaiveDate;
+
+    /// it should be able to load its own example
+    #[test]
+    fn load_stocks() {
+        let file = std::fs::File::open("stocks.json").unwrap();
+        let json: serde_json::Value = serde_json::from_reader(file).unwrap();
+
+        let portfolio = super::Portfolio::from_json(json).set_debug(true);
+        assert!(!portfolio.portfolio.is_empty());
+
+        for i in portfolio.portfolio.keys() {
+            assert!(i.quantity > 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn non_zero_portfolio() {
+        let file = std::fs::File::open("stocks.json").unwrap();
+        let json: serde_json::Value = serde_json::from_reader(file).unwrap();
+        let mut portfolio = super::Portfolio::from_json(json).set_debug(false);
+
+        let date = NaiveDate::from_ymd_opt(2025, 9, 2).unwrap();
+        portfolio.get_prices(date);
+        portfolio.wait_for_prices().await;
+        assert!(portfolio.portfolio_value(date) > 0.);
     }
 }

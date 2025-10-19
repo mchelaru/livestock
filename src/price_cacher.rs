@@ -35,6 +35,7 @@ impl PriceCacher {
         match provider {
             Provider::YFinance(yfinance) => yfinance.get_provider_name(),
             Provider::Xfra(xfra) => xfra.get_provider_name(),
+            _ => unimplemented!(),
         }
     }
 
@@ -44,6 +45,14 @@ impl PriceCacher {
         date: NaiveDate,
     ) -> Result<(Instrument, NaiveDate, f64), std::io::Error> {
         const DATE_FORMATTER: &str = "%Y-%m-%d";
+        // check if the date is in the holding range
+        let sold = match instrument.get_sell_date() {
+            Some(sell_date) => &date >= sell_date,
+            None => false,
+        };
+        if sold || instrument.get_buy_date() > &date {
+            return Ok((instrument, date, f64::from(0)));
+        }
         // try matching it in the cache
         let provider = instrument.get_provider();
         let provider_name = Self::get_provider_name(&provider);

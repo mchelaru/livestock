@@ -19,15 +19,29 @@ Options:
 
 ```
 {
-    "Yahoo": {
-        "AAPL": 50,
-        "CSCO": 20,
-        "SPY": 25,
-        "TSLA": 10
-    },
-    "XFRA": {
-        "DE0001102408": 1000
-    }
+    "Yahoo": [
+        {
+            "description": "I have bought these long time ago",
+            "symbol": "AAPL",
+            "quantity": 50,
+            "buy_date": "2022-11-22",
+            "sell_date": "2024-11-21"
+        },
+        {
+            "symbol": "AAPL",
+            "quantity": 100,
+            "buy_date": "2022-11-22",
+            "sell_date": "2024-11-21"
+        },
+    ],
+    "XFRA": [
+        {
+            "symbol": "DE0001102408",
+            "quantity": 1000,
+            "buy_date": "2022-11-22",
+            "sell_date": "2024-11-21"
+        }
+    ]
 }
 ```
 
