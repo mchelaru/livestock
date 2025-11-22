@@ -17,12 +17,18 @@ pub struct Instrument {
     buy_date: NaiveDate,
     #[serde(default)]
     sell_date: Option<NaiveDate>,
+    #[serde(default = "default_broker")]
+    broker: String,
     #[serde(skip, default = "no_provider")]
     provider: Arc<Provider>,
 }
 
 fn no_provider() -> Arc<Provider> {
     Arc::new(Provider::None)
+}
+
+fn default_broker() -> String {
+    String::from("none")
 }
 
 impl PartialEq for Instrument {
@@ -188,6 +194,23 @@ impl Portfolio {
             .map(|(_, value)| value)
             .reduce(|acc, p| acc + p)
             .unwrap_or_default()
+    }
+
+    /// filter the portfolio content based on broker regexp match
+    pub fn filter(&mut self, broker_match: String) -> bool {
+        match regex::Regex::new(&broker_match) {
+            Ok(r) => {
+                self.portfolio
+                    .retain(|instrument, _| r.is_match(&instrument.broker));
+                true
+            }
+            Err(e) => {
+                if self.debug {
+                    eprintln!("Invalid broker regex '{}': {}", broker_match, e);
+                }
+                false
+            }
+        }
     }
 }
 

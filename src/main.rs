@@ -31,6 +31,10 @@ struct Args {
     /// display the daily portfolio value
     #[arg(long, default_value_t = false)]
     display_daily_value: bool,
+
+    /// filter the results based on the regexp match
+    #[arg(short, long, default_value = "")]
+    broker_match: String,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
@@ -58,6 +62,9 @@ async fn main() {
     };
 
     let mut portfolio = Portfolio::from_json(json).set_debug(args.debug);
+    if !args.broker_match.is_empty() && !portfolio.filter(args.broker_match) {
+        return;
+    }
     let mut current_date = start_date;
     let mut sorted_dates = vec![];
     while current_date < today {
