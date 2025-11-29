@@ -243,4 +243,19 @@ mod test {
         portfolio.wait_for_prices().await;
         assert!(portfolio.portfolio_value(date) > 0.);
     }
+
+    #[tokio::test]
+    async fn exact_value() {
+        let file = std::fs::File::open("stocks.json").unwrap();
+        let json: serde_json::Value = serde_json::from_reader(file).unwrap();
+        let mut portfolio = super::Portfolio::from_json(json).set_debug(false);
+
+        let date = NaiveDate::from_ymd_opt(2025, 9, 2).unwrap();
+        portfolio.get_prices(date);
+        portfolio.wait_for_prices().await;
+        assert_eq!(
+            (6407.20 * 100.) as u32, // round to two decimals
+            (portfolio.portfolio_value(date) * 100.0) as u32
+        );
+    }
 }
