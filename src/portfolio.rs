@@ -4,16 +4,32 @@ use std::io::Error;
 use std::{collections::HashMap, sync::Arc};
 
 use chrono::{Days, NaiveDate};
+use ordered_float::NotNan;
 use serde::Deserialize;
 use tokio::task::JoinSet;
 
 use crate::{price_cacher::PriceCacher, Provider};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Quantity(NotNan<f64>);
+
+impl<'de> Deserialize<'de> for Quantity {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = f64::deserialize(deserializer)?;
+        Ok(Quantity(
+            NotNan::new(value).map_err(serde::de::Error::custom)?,
+        ))
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Instrument {
     #[serde(rename = "symbol")]
     name: String,
-    quantity: u32,
+    quantity: Quantity,
     buy_date: NaiveDate,
     #[serde(default)]
     sell_date: Option<NaiveDate>,
@@ -183,7 +199,7 @@ impl Portfolio {
             .map(move |(instrument, value)| {
                 (
                     instrument.name.clone(),
-                    instrument.quantity as f64 * value[&date],
+                    instrument.quantity.0 * value[&date],
                 )
             })
     }
@@ -228,7 +244,7 @@ mod test {
         assert!(!portfolio.portfolio.is_empty());
 
         for i in portfolio.portfolio.keys() {
-            assert!(i.quantity > 0);
+            assert!(f64::from(i.quantity.0) > 0.);
         }
     }
 
