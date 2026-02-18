@@ -7,6 +7,7 @@ mod xfra;
 #[path = "providers/yfinance.rs"]
 mod yfinance;
 
+#[expect(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub(crate) enum Provider {
     None,

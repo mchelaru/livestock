@@ -139,7 +139,11 @@ impl YFinance {
             .get_quote_history_interval(&yahoo_symbol, start, end, "1d")
             .await
             .map_err(|err| YFinanceError::new(&ticker, &date, err))?;
-        Ok((ticker, date, quote.last_quote().unwrap().close))
+        let price = quote
+            .last_quote()
+            .map_err(|err| YFinanceError::new(&ticker, &date, err))?
+            .close;
+        Ok((ticker, date, price))
     }
 }
 
