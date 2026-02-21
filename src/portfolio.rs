@@ -1,4 +1,5 @@
 use std::collections::hash_map::Entry;
+use std::collections::HashSet;
 use std::hash::Hash;
 use std::io::Error;
 use std::{collections::HashMap, sync::Arc};
@@ -227,6 +228,19 @@ impl Portfolio {
                 false
             }
         }
+    }
+
+    pub fn broker_list(&self) -> Vec<String> {
+        let mut brokers: Vec<String> = self
+            .portfolio
+            .keys()
+            .map(|i| &i.broker)
+            .cloned()
+            .collect::<HashSet<String>>()
+            .into_iter()
+            .collect();
+        brokers.sort();
+        brokers
     }
 }
 

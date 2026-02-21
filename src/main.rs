@@ -35,6 +35,10 @@ struct Args {
     /// filter the results based on the regexp match
     #[arg(short, long, default_value = "")]
     broker_match: String,
+
+    /// list the brokers according to the configuration file
+    #[arg(long)]
+    broker_list: bool,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
@@ -62,6 +66,12 @@ async fn main() {
     };
 
     let mut portfolio = Portfolio::from_json(json).set_debug(args.debug);
+
+    if args.broker_list {
+        println!("Brokers: {:#?}", portfolio.broker_list());
+        return;
+    }
+
     if !args.broker_match.is_empty() && !portfolio.filter(args.broker_match) {
         return;
     }
