@@ -52,6 +52,7 @@ impl PartialEq for Instrument {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
             && self.quantity == other.quantity
+            && self.buy_date == other.buy_date
             && self.provider.get_provider_name() == other.provider.get_provider_name()
     }
 }
@@ -62,6 +63,7 @@ impl Hash for Instrument {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.name.hash(state);
         self.quantity.hash(state);
+        self.buy_date.hash(state);
         self.provider.get_provider_name().hash(state);
     }
 }
@@ -246,7 +248,10 @@ impl Portfolio {
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
+
     use chrono::NaiveDate;
+    use ordered_float::NotNan;
 
     /// it should be able to load its own example
     #[test]
@@ -260,6 +265,34 @@ mod test {
         for i in portfolio.portfolio.keys() {
             assert!(f64::from(i.quantity.0) > 0.);
         }
+    }
+
+    #[test]
+    fn different_buy_dates_are_distinct_instruments() {
+        let provider = std::sync::Arc::new(crate::Provider::build("Yahoo").unwrap());
+
+        let a = super::Instrument {
+            name: "AAPL".to_string(),
+            quantity: super::Quantity(NotNan::new(10.0).unwrap()),
+            buy_date: NaiveDate::from_ymd_opt(2024, 1, 10).unwrap(),
+            sell_date: None,
+            broker: "none".to_string(),
+            provider: Arc::clone(&provider),
+        };
+        let b = super::Instrument {
+            name: "AAPL".to_string(),
+            quantity: super::Quantity(NotNan::new(10.0).unwrap()),
+            buy_date: NaiveDate::from_ymd_opt(2024, 2, 10).unwrap(),
+            sell_date: None,
+            broker: "none".to_string(),
+            provider: Arc::clone(&provider),
+        };
+
+        assert_ne!(a, b);
+        let mut set = std::collections::HashSet::new();
+        assert!(set.insert(a.clone()));
+        assert!(set.insert(b.clone()));
+        assert_eq!(set.len(), 2);
     }
 
     #[tokio::test]
