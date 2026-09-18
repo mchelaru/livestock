@@ -1,5 +1,5 @@
-use std::collections::hash_map::Entry;
 use std::collections::HashSet;
+use std::collections::hash_map::Entry;
 use std::hash::Hash;
 use std::io::Error;
 use std::{collections::HashMap, sync::Arc};
@@ -9,7 +9,7 @@ use ordered_float::NotNan;
 use serde::Deserialize;
 use tokio::task::JoinSet;
 
-use crate::{price_cacher::PriceCacher, Provider};
+use crate::{Provider, price_cacher::PriceCacher};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Quantity(NotNan<f64>);
@@ -189,6 +189,15 @@ impl Portfolio {
                 current_date = current_date.checked_add_days(Days::new(1)).unwrap();
             }
         }
+    }
+
+    /// Returns an iterator over the instruments
+    pub fn instruments(&self) -> impl Iterator<Item = &Instrument> {
+        self.portfolio.keys()
+    }
+
+    pub fn price_at(&self, instrument: &Instrument, date: &NaiveDate) -> Option<f64> {
+        self.portfolio.get(instrument)?.get(date).cloned()
     }
 
     /// Returns an iterator over the instruments and their values on a certain date

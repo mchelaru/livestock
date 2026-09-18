@@ -104,6 +104,19 @@ async fn main() {
         }
     }
 
+    // check if we could get prices for all the instruments
+    let instruments = portfolio.instruments().cloned();
+    'outer: for instrument in instruments {
+        for date in &sorted_dates {
+            if let Some(price) = portfolio.price_at(&instrument, &date.date())
+                && price > 0.
+            {
+                continue 'outer;
+            }
+        }
+        println!("Unable to retrieve a price for {}", instrument.get_name());
+    }
+
     //
     // graph and print the total value
     //
