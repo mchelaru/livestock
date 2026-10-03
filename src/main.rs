@@ -90,8 +90,14 @@ async fn main() {
         }
         println!("Matched brokers: {}", portfolio.broker_list().join(", "));
     }
-    if !args.asset_class_match.is_empty() && !portfolio.filter_asset_class(args.asset_class_match) {
-        return;
+    if !args.asset_class_match.is_empty() {
+        if !portfolio.filter_asset_class(args.asset_class_match) {
+            return;
+        }
+        println!(
+            "Matched asset classes: {}",
+            portfolio.asset_class_list().join(", ")
+        );
     }
     let mut current_date = start_date;
     let mut sorted_dates = vec![];
