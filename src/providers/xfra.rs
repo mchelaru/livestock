@@ -63,12 +63,11 @@ impl Xfra {
             serde_json::from_value(price.clone()).expect("XFRA: error transforming price to float");
 
         // divide the price by 100 in the case the price is traded in percent
-        if let Some(value) = json.get("tradedInPercent") {
-            if let Ok(boolean_value) = serde_json::from_value(value.clone()) {
-                if boolean_value {
-                    float_price /= 100.0;
-                }
-            }
+        if let Some(value) = json.get("tradedInPercent")
+            && let Ok(boolean_value) = serde_json::from_value(value.clone())
+            && boolean_value
+        {
+            float_price /= 100.0;
         }
 
         self.cache.lock().unwrap().insert(isin.clone(), float_price);
