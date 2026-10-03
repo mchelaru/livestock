@@ -79,10 +79,15 @@ async fn main() {
     let mut sorted_dates = vec![];
     while current_date < today {
         if current_date.weekday() != Weekday::Sat && current_date.weekday() != Weekday::Sun {
-            portfolio.get_prices(current_date.into());
             sorted_dates.push(current_date);
         }
         current_date = current_date.checked_add_days(Days::new(1)).unwrap();
+    }
+    if let Some(first_date) = sorted_dates.first() {
+        portfolio.exclude_sold_before((*first_date).into());
+    }
+    for date in &sorted_dates {
+        portfolio.get_prices((*date).into());
     }
     portfolio.wait_for_prices().await;
 

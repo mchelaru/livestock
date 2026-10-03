@@ -129,6 +129,15 @@ impl Portfolio {
         self
     }
 
+    /// Removes instruments that were sold before the first date in the requested interval.
+    pub fn exclude_sold_before(&mut self, start_date: NaiveDate) {
+        self.portfolio.retain(|instrument, _| {
+            instrument
+                .get_sell_date()
+                .is_none_or(|sell_date| sell_date >= start_date)
+        });
+    }
+
     /// Starts async jobs to fetch the prices for the portfolio on a certain date
     pub fn get_prices(&mut self, date: NaiveDate) {
         for instrument in self.portfolio.keys() {
@@ -298,10 +307,47 @@ mod test {
         };
 
         assert_ne!(a, b);
+        #[allow(clippy::mutable_key_type)]
         let mut set = std::collections::HashSet::new();
         assert!(set.insert(a.clone()));
         assert!(set.insert(b.clone()));
         assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn excludes_instruments_sold_before_interval_start() {
+        let portfolio = serde_json::json!({
+            "Yahoo": [
+                {
+                    "symbol": "SOLD",
+                    "quantity": 1,
+                    "buy_date": "2024-01-01",
+                    "sell_date": "2024-01-09"
+                },
+                {
+                    "symbol": "SELLS_ON_START",
+                    "quantity": 1,
+                    "buy_date": "2024-01-01",
+                    "sell_date": "2024-01-10"
+                },
+                {
+                    "symbol": "UNSOLD",
+                    "quantity": 1,
+                    "buy_date": "2024-01-01"
+                }
+            ]
+        });
+        let mut portfolio = super::Portfolio::from_json(portfolio);
+
+        portfolio.exclude_sold_before(NaiveDate::from_ymd_opt(2024, 1, 10).unwrap());
+
+        let names = portfolio
+            .instruments()
+            .map(super::Instrument::get_name)
+            .collect::<std::collections::HashSet<_>>();
+        assert!(!names.contains("SOLD"));
+        assert!(names.contains("SELLS_ON_START"));
+        assert!(names.contains("UNSOLD"));
     }
 
     #[tokio::test]
