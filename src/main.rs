@@ -72,8 +72,11 @@ async fn main() {
         return;
     }
 
-    if !args.broker_match.is_empty() && !portfolio.filter(args.broker_match) {
-        return;
+    if !args.broker_match.is_empty() {
+        if !portfolio.filter(args.broker_match) {
+            return;
+        }
+        println!("Matched brokers: {}", portfolio.broker_list().join(", "));
     }
     let mut current_date = start_date;
     let mut sorted_dates = vec![];

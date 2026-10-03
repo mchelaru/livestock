@@ -350,6 +350,39 @@ mod test {
         assert!(names.contains("UNSOLD"));
     }
 
+    #[test]
+    fn filters_brokers_and_lists_matches_alphabetically() {
+        let portfolio = serde_json::json!({
+            "Yahoo": [
+                {
+                    "symbol": "A",
+                    "quantity": 1,
+                    "buy_date": "2024-01-01",
+                    "broker": "Zeta"
+                },
+                {
+                    "symbol": "B",
+                    "quantity": 1,
+                    "buy_date": "2024-01-01",
+                    "broker": "Alpha"
+                },
+                {
+                    "symbol": "C",
+                    "quantity": 1,
+                    "buy_date": "2024-01-01",
+                    "broker": "Other"
+                }
+            ]
+        });
+        let mut portfolio = super::Portfolio::from_json(portfolio);
+
+        assert!(portfolio.filter("a".to_string()));
+        assert_eq!(
+            portfolio.broker_list(),
+            vec!["Alpha".to_string(), "Zeta".to_string()]
+        );
+    }
+
     #[tokio::test]
     async fn non_zero_portfolio() {
         let file = std::fs::File::open("stocks.json").unwrap();
