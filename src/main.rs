@@ -43,6 +43,10 @@ struct Args {
     /// list the brokers according to the configuration file
     #[arg(long)]
     broker_list: bool,
+
+    /// list the asset classes according to the configuration file
+    #[arg(long)]
+    asset_class_list: bool,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
@@ -73,6 +77,10 @@ async fn main() {
 
     if args.broker_list {
         println!("Brokers: {:#?}", portfolio.broker_list());
+        return;
+    }
+    if args.asset_class_list {
+        println!("Asset classes: {:#?}", portfolio.asset_class_list());
         return;
     }
 

@@ -285,6 +285,19 @@ impl Portfolio {
         brokers.sort();
         brokers
     }
+
+    pub fn asset_class_list(&self) -> Vec<String> {
+        let mut asset_classes: Vec<String> = self
+            .portfolio
+            .keys()
+            .map(|instrument| &instrument.asset_class)
+            .cloned()
+            .collect::<HashSet<String>>()
+            .into_iter()
+            .collect();
+        asset_classes.sort();
+        asset_classes
+    }
 }
 
 #[cfg(test)]
@@ -442,6 +455,38 @@ mod test {
         assert!(names.contains("BOND"));
         assert!(!names.contains("STOCK"));
         assert!(!names.contains("DEFAULT"));
+    }
+
+    #[test]
+    fn lists_asset_classes_alphabetically_without_duplicates() {
+        let portfolio = serde_json::json!({
+            "Yahoo": [
+                {
+                    "symbol": "A",
+                    "quantity": 1,
+                    "buy_date": "2024-01-01",
+                    "asset_class": "equity"
+                },
+                {
+                    "symbol": "B",
+                    "quantity": 1,
+                    "buy_date": "2024-01-01",
+                    "asset_class": "fixed_income"
+                },
+                {
+                    "symbol": "C",
+                    "quantity": 1,
+                    "buy_date": "2024-01-01",
+                    "asset_class": "equity"
+                }
+            ]
+        });
+        let portfolio = super::Portfolio::from_json(portfolio);
+
+        assert_eq!(
+            portfolio.asset_class_list(),
+            vec!["equity".to_string(), "fixed_income".to_string()]
+        );
     }
 
     #[tokio::test]
