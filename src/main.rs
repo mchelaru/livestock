@@ -36,6 +36,10 @@ struct Args {
     #[arg(short, long, default_value = "")]
     broker_match: String,
 
+    /// filter the results based on the asset class regexp match
+    #[arg(long, default_value = "")]
+    asset_class_match: String,
+
     /// list the brokers according to the configuration file
     #[arg(long)]
     broker_list: bool,
@@ -77,6 +81,9 @@ async fn main() {
             return;
         }
         println!("Matched brokers: {}", portfolio.broker_list().join(", "));
+    }
+    if !args.asset_class_match.is_empty() && !portfolio.filter_asset_class(args.asset_class_match) {
+        return;
     }
     let mut current_date = start_date;
     let mut sorted_dates = vec![];

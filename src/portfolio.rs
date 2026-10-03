@@ -36,6 +36,8 @@ pub struct Instrument {
     sell_date: Option<NaiveDate>,
     #[serde(default = "default_broker")]
     broker: String,
+    #[serde(default = "default_class")]
+    asset_class: String,
     #[serde(skip, default = "no_provider")]
     provider: Arc<Provider>,
 }
@@ -46,6 +48,10 @@ fn no_provider() -> Arc<Provider> {
 
 fn default_broker() -> String {
     String::from("none")
+}
+
+fn default_class() -> String {
+    String::from("equity")
 }
 
 impl PartialEq for Instrument {
@@ -250,6 +256,23 @@ impl Portfolio {
         }
     }
 
+    /// Filters the portfolio content based on asset class regexp match.
+    pub fn filter_asset_class(&mut self, asset_class_match: String) -> bool {
+        match regex::Regex::new(&asset_class_match) {
+            Ok(r) => {
+                self.portfolio
+                    .retain(|instrument, _| r.is_match(&instrument.asset_class));
+                true
+            }
+            Err(e) => {
+                if self.debug {
+                    eprintln!("Invalid asset class regex '{}': {}", asset_class_match, e);
+                }
+                false
+            }
+        }
+    }
+
     pub fn broker_list(&self) -> Vec<String> {
         let mut brokers: Vec<String> = self
             .portfolio
@@ -295,6 +318,7 @@ mod test {
             buy_date: NaiveDate::from_ymd_opt(2024, 1, 10).unwrap(),
             sell_date: None,
             broker: "none".to_string(),
+            asset_class: "equity".to_string(),
             provider: Arc::clone(&provider),
         };
         let b = super::Instrument {
@@ -303,6 +327,7 @@ mod test {
             buy_date: NaiveDate::from_ymd_opt(2024, 2, 10).unwrap(),
             sell_date: None,
             broker: "none".to_string(),
+            asset_class: "equity".to_string(),
             provider: Arc::clone(&provider),
         };
 
@@ -381,6 +406,42 @@ mod test {
             portfolio.broker_list(),
             vec!["Alpha".to_string(), "Zeta".to_string()]
         );
+    }
+
+    #[test]
+    fn filters_asset_classes_by_regex() {
+        let portfolio = serde_json::json!({
+            "Yahoo": [
+                {
+                    "symbol": "STOCK",
+                    "quantity": 1,
+                    "buy_date": "2024-01-01",
+                    "asset_class": "equity"
+                },
+                {
+                    "symbol": "BOND",
+                    "quantity": 1,
+                    "buy_date": "2024-01-01",
+                    "asset_class": "fixed_income"
+                },
+                {
+                    "symbol": "DEFAULT",
+                    "quantity": 1,
+                    "buy_date": "2024-01-01"
+                }
+            ]
+        });
+        let mut portfolio = super::Portfolio::from_json(portfolio);
+
+        assert!(portfolio.filter_asset_class("fixed_income".to_string()));
+        let names = portfolio
+            .instruments()
+            .map(super::Instrument::get_name)
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(names.len(), 1);
+        assert!(names.contains("BOND"));
+        assert!(!names.contains("STOCK"));
+        assert!(!names.contains("DEFAULT"));
     }
 
     #[tokio::test]
