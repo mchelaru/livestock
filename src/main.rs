@@ -48,9 +48,9 @@ struct Args {
     #[arg(long)]
     asset_class_list: bool,
 
-    /// show output, otherwise just cache the prices
-    #[arg(long, default_value_t = true)]
-    show_output: bool,
+    /// disable regular output and just cache the prices
+    #[arg(long, default_value_t = false)]
+    disable_output: bool,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
@@ -150,7 +150,7 @@ async fn main() {
         println!("Unable to retrieve a price for {}", instrument.get_name());
     }
 
-    if !args.show_output {
+    if args.disable_output {
         // quick return if we don't have to display anything
         return;
     }
